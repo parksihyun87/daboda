@@ -1,0 +1,31 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# 시크릿 — 절대 커밋 금지
+missing_person_mvp/.env
+.env
+
+# 런타임 데이터 (개인정보 포함 가능)
+missing_person_mvp/data/db/
+missing_person_mvp/data/footage/
+missing_person_mvp/data/results/
+missing_person_mvp/data/results/vton_eval/
+
+# 영상 파일 — 대용량(42MB+) + 개인 보행영상 포함
+missing_person_mvp/data/video/*.mp4
+
+# 모델 가중치 (바이너리, 자동 다운로드로 대체)
+yolo11n.pt
+yolo11n-pose.pt
+**/weights/flux/
+**/weights/
+
+# 삭제된 디렉토리 (재생성 방지)
+infra/
+third_party/
+densepose_/
+
+# 내부 문서
+HANDOFF.md
+*.docx
