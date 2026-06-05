@@ -316,7 +316,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "메뉴",
-        ["👤 인물 등록", "👕 착장 이미지 생성", "📹 CCTV 분석 & 정확도 평가"],
+        ["📖 How to Use", "👤 인물 등록", "👕 착장 이미지 생성", "📹 CCTV 분석 & 정확도 평가"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -342,6 +342,58 @@ with st.sidebar:
             st.caption(f"{_vec_badge[lvl]} {p['name']} ({p['person_id']}) — {desc}")
     else:
         st.caption("등록된 인물 없음")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 화면 0: How to Use
+# ═══════════════════════════════════════════════════════════════════
+if page == "📖 How to Use":
+    st.header("📖 How to Use")
+
+    st.markdown("""
+    ## 기능 소개
+    DABODA 프로젝트는 실종 대상자의 평소 이미지 및 걸음 정보를 등록하여, 실종 당일 착장 이미지를 생성하고 CCTV 영상에서 탐지하는 시스템입니다.
+        
+    1. **인물 등록**: 평소 전신 사진과 걸음걸이 동영상을 등록하여 인물 프로필을 생성합니다.
+    2. **착장 이미지 생성**: 실종 당일 착장 설명을 입력하면 Gemini 2.0 Flash, Flux Inpaint(로컬 모델로 미적용)등 다양한 생성 모델로 수배 이미지를 생성합니다.
+    3. **CCTV 분석**: 생성된 착장 이미지로 CCTV 영상을 분석하여 탐지 구간과 정확도를 평가합니다.
+                
+
+    좌측의 해당 메뉴들을 통하여 각 기능을 이용할 수 있습니다.
+                """)
+
+    # 기술 시연 영상
+    _tutorial_dir = _cfg.DATA_DIR / "video" / "tutorial"
+    _tutorial_vids = sorted(_tutorial_dir.glob("*.mp4")) if _tutorial_dir.exists() else []
+    if _tutorial_vids:
+        st.subheader("🎬 기술 시연 영상")
+        st.markdown("""
+    실제 기술 시연 영상은 실제 대상자의 사진을 통해 착장을 생성 후 분석을 하는 과정을 담은 동영상 입니다.
+                """)
+        with open(str(_tutorial_vids[0]), "rb") as _vf:
+            st.video(_vf.read())
+    else:
+        st.info("🎬 시연 영상을 추가하려면 `data/video/tutorial/` 폴더에 MP4를 넣으세요.")
+
+    # 탐지용 원본 동영상-1
+    if _cfg.DEMO_VIDEO_PATH.exists():
+        st.subheader("📹 탐지용 원본 동영상")
+        st.markdown("""
+    탐지용 원본 동영상은 대상자를 찾기 위해서 탐색하는 영상입니다.
+                    
+    *4초~25초 : 정답(target label)인물
+                    
+    *5분 31초~6분 6초 : 비정답 인물. 검은 모자에 검은 상하의 복장. 안경 미착용
+                    
+    *14분 43초~ 15분 29초: 비정답 인물. 초록색 비니 모자에 검은색 가디건, 회색 상의, 짙은 카키색 7부 반바지. 붉은 테 안경 착용
+                    
+    *18분 37초~18분 51초 : 비정답 인물. 짧은 점퍼 상의에 아디다스 검은색 바탕에 옆면 삼색줄 트레이닝 바지. 붉은 뿔테 안경 착용
+                """)
+        st.caption(f"파일명: {_cfg.DEMO_VIDEO_PATH.name}")
+        with open(str(_cfg.DEMO_VIDEO_PATH), "rb") as _df:
+            st.video(_df.read())
+    else:
+        st.info("📹 탐지용 영상이 없습니다. `data/video/` 폴더에 데모 영상을 추가하세요.")
 
 
 # ═══════════════════════════════════════════════════════════════════
