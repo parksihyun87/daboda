@@ -174,10 +174,12 @@ mkdir -p missing_person_mvp/data/video/cvat_xml
 screen -S vitadigna
 
 cd /workspace/app
-KMP_DUPLICATE_LIB_OK=TRUE python -m streamlit run missing_person_mvp/streamlit_app.py \
+KMP_DUPLICATE_LIB_OK=TRUE streamlit run missing_person_mvp/streamlit_app.py \
   --server.port 8501 \
   --server.address 0.0.0.0 \
   --server.headless true \
+  --server.enableCORS false \
+  --server.enableXsrfProtection false \
   --server.maxUploadSize 500
 
 # Ctrl+A, D 로 screen 분리 (앱은 계속 실행)
@@ -197,8 +199,9 @@ screen -r vitadigna             # 로그 재확인
 ```bash
 screen -S vitadigna
 cd /workspace/app
-KMP_DUPLICATE_LIB_OK=TRUE python -m streamlit run missing_person_mvp/streamlit_app.py \
-  --server.port 8501 --server.address 0.0.0.0 --server.headless true --server.maxUploadSize 500
+KMP_DUPLICATE_LIB_OK=TRUE streamlit run missing_person_mvp/streamlit_app.py \
+  --server.port 8501 --server.address 0.0.0.0 --server.headless true \
+  --server.enableCORS false --server.enableXsrfProtection false --server.maxUploadSize 500
 ```
 
 ---

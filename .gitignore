@@ -12,8 +12,8 @@ missing_person_mvp/data/footage/
 missing_person_mvp/data/results/
 missing_person_mvp/data/results/vton_eval/
 
-# 영상 파일 — 대용량(42MB+) + 개인 보행영상 포함
-missing_person_mvp/data/video/*.mp4
+# 개인 보행영상 제외 (gait 등록용 사생활 영상)
+missing_person_mvp/data/video/walk_gait*.mp4
 
 # 모델 가중치 (바이너리, 자동 다운로드로 대체)
 yolo11n.pt
