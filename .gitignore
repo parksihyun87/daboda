@@ -29,3 +29,6 @@ densepose_/
 # 내부 문서
 HANDOFF.md
 *.docx
+
+# 개인정보 (이력서 등)
+missing_person_mvp/assets/*.pdf

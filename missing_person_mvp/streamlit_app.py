@@ -11,6 +11,7 @@ import os
 # torch/faiss import 이전에 반드시 설정해야 함.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
+import base64
 import sys
 import tempfile
 from datetime import datetime
@@ -316,7 +317,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "메뉴",
-        ["📖 How to Use", "👤 인물 등록", "👕 착장 이미지 생성", "📹 CCTV 분석 & 정확도 평가"],
+        ["📖 How to Use", "👤 인물 등록", "👕 착장 이미지 생성", "📹 CCTV 분석 & 정확도 평가", "🧑 Who Am I"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -1503,4 +1504,21 @@ elif page == "📹 CCTV 분석 & 정확도 평가":
                                            file_name="summary.md", mime="text/markdown")
                 except Exception as _ee:
                     st.error(f"평가 실패: {_ee}")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 화면 4: Who Am I
+# ═══════════════════════════════════════════════════════════════════
+if page == "🧑 Who Am I":
+    st.header("🧑 Who Am I")
+    _resume_path = _Path(__file__).resolve().parent / "assets" / "resume.pdf"
+    if _resume_path.exists():
+        _pdf_b64 = base64.b64encode(_resume_path.read_bytes()).decode("utf-8")
+        st.markdown(
+            f'<iframe src="data:application/pdf;base64,{_pdf_b64}" '
+            f'width="100%" height="900px" type="application/pdf"></iframe>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("📄 이력서 파일을 `missing_person_mvp/assets/resume.pdf` 에 넣어주세요.")
 
