@@ -64,36 +64,39 @@ def _gemini_generate(base_path: str, outfit_desc: str) -> Image.Image:
         import google.generativeai as genai           # type: ignore
 
         genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash-image")
-
-        buf = io.BytesIO()
-        Image.open(base_path).convert("RGB").save(buf, format="JPEG")
-        img_bytes = buf.getvalue()
-
-        prompt = (
-            "Edit this full-body person photo so the person appears to wear: "
-            f"{outfit_desc}. Preserve identity, body shape, pose, and a neutral background."
+        model = genai.GenerativeModel(
+            "gemini-2.5-flash-image",
+            generation_config={"response_modalities": ["IMAGE"]},
         )
-        response = model.generate_content([
-            prompt,
-            {"mime_type": "image/jpeg", "data": img_bytes},
-        ])
 
-        # google.generativeai 응답에서 이미지 추출
-        candidates = getattr(response, "candidates", None)
-        if candidates:
-            cand = candidates[0]
-            content = getattr(cand, "content", None)
-            parts = getattr(content, "parts", None) if content else None
-            for part in (parts or []):
-                inline = getattr(part, "inline_data", None)
-                if inline and getattr(inline, "data", None):
-                    return Image.open(io.BytesIO(inline.data)).convert("RGB")
-            fr = getattr(cand, "finish_reason", "UNKNOWN")
-            raise ImageGenerationError(f"Gemini 이미지 없음 (finish_reason={fr})")
+        pil_img = Image.open(base_path).convert("RGB")
+        prompt = (
+            "Generate a full-body photo of this person wearing: "
+            f"{outfit_desc}. Preserve identity, body shape, pose, and a neutral background. "
+            "Output an image only."
+        )
 
-        fb = getattr(response, "prompt_feedback", None)
-        raise ImageGenerationError(f"Gemini 응답에 candidates 없음 (prompt_feedback={fb})")
+        for attempt in range(3):
+            response = model.generate_content([prompt, pil_img])
+            candidates = getattr(response, "candidates", None)
+            if candidates:
+                cand = candidates[0]
+                parts = getattr(getattr(cand, "content", None), "parts", None) or []
+                for part in parts:
+                    inline = getattr(part, "inline_data", None)
+                    if inline and getattr(inline, "data", None):
+                        raw = inline.data
+                        if not isinstance(raw, (bytes, bytearray)):
+                            raw = bytes(raw)
+                        return Image.open(io.BytesIO(raw)).convert("RGB")
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                fr = getattr(cand, "finish_reason", "UNKNOWN")
+                raise ImageGenerationError(f"Gemini 이미지 없음 (finish_reason={fr})")
+            fb = getattr(response, "prompt_feedback", None)
+            raise ImageGenerationError(f"Gemini 응답에 candidates 없음 (prompt_feedback={fb})")
+
     except ImageGenerationError:
         raise
     except Exception as exc:
@@ -109,42 +112,71 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
         import google.generativeai as genai           # type: ignore
 
         genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash-image")
+        # response_modalities=IMAGE 명시 → 텍스트 응답 방지
+        model = genai.GenerativeModel(
+            "gemini-2.5-flash-image",
+            generation_config={"response_modalities": ["IMAGE"]},
+        )
 
-        # PIL Image 직접 전달 — SDK 버전별 raw bytes 파싱 오류 우회
         pil_img = Image.open(base_path).convert("RGB")
 
         prompts = {
-            "front": f"Edit this full-body person photo so they appear to wear: {outfit_desc}. Keep front-facing view, neutral pose, identity preserved.",
-            "side": f"Edit this full-body person photo so they appear to wear: {outfit_desc}. Show side profile view (person standing sideways), same person, identity preserved.",
-            "back": f"Edit this full-body person photo so they appear to wear: {outfit_desc}. Show back view (person facing away), same person, identity preserved.",
+            "front": (
+                f"Edit the outfit of the person in this photo so they wear: {outfit_desc}. "
+                "Keep the EXACT same camera angle and pose (front-facing). "
+                "Only change the clothing, preserve everything else. Output an image only."
+            ),
+            "side": (
+                f"Using this person as reference, generate a NEW full-body photo of the SAME person "
+                f"photographed from a 90-degree side angle (lateral profile). "
+                f"The person is turned sideways so the camera sees only their left side profile — "
+                f"face pointing left, body perpendicular to the camera. "
+                f"They are wearing: {outfit_desc}. Neutral indoor background. Output an image only."
+            ),
+            "back": (
+                f"Using this person as reference, generate a NEW full-body photo of the SAME person "
+                f"photographed from directly behind (180-degree back view). "
+                f"The person's back faces the camera completely — no face visible, "
+                f"only the rear of their head, back, and the back of their legs. "
+                f"They are wearing: {outfit_desc}. Neutral indoor background. Output an image only."
+            ),
         }
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def _call_one(view: str, prompt: str) -> tuple[str, Image.Image]:
-            resp = model.generate_content([prompt, pil_img])
-            candidates = getattr(resp, "candidates", None)
-            if candidates:
-                cand = candidates[0]
-                parts = getattr(getattr(cand, "content", None), "parts", None) or []
-                for part in parts:
-                    inline = getattr(part, "inline_data", None)
-                    if inline and getattr(inline, "data", None):
-                        raw = inline.data
-                        if not isinstance(raw, (bytes, bytearray)):
-                            raw = bytes(raw)
-                        return view, Image.open(io.BytesIO(raw)).convert("RGB")
-                fr = getattr(cand, "finish_reason", "UNKNOWN")
-                raise ImageGenerationError(f"Gemini {view} 이미지 없음 (finish_reason={fr})")
-            fb = getattr(resp, "prompt_feedback", None)
-            raise ImageGenerationError(f"Gemini {view} 응답에 candidates 없음 (prompt_feedback={fb})")
+            for attempt in range(3):
+                resp = model.generate_content([prompt, pil_img])
+                candidates = getattr(resp, "candidates", None)
+                if candidates:
+                    cand = candidates[0]
+                    parts = getattr(getattr(cand, "content", None), "parts", None) or []
+                    for part in parts:
+                        inline = getattr(part, "inline_data", None)
+                        if inline and getattr(inline, "data", None):
+                            raw = inline.data
+                            if not isinstance(raw, (bytes, bytearray)):
+                                raw = bytes(raw)
+                            return view, Image.open(io.BytesIO(raw)).convert("RGB")
+                    # 이미지 없이 텍스트만 반환 — 재시도
+                    if attempt < 2:
+                        time.sleep(2)
+                        continue
+                    fr = getattr(cand, "finish_reason", "UNKNOWN")
+                    raise ImageGenerationError(
+                        f"Gemini {view} 이미지 없음 after {attempt+1} attempts (finish_reason={fr})"
+                    )
+                fb = getattr(resp, "prompt_feedback", None)
+                raise ImageGenerationError(
+                    f"Gemini {view} 응답에 candidates 없음 (prompt_feedback={fb})"
+                )
+            raise ImageGenerationError(f"Gemini {view} 이미지 없음 (최대 재시도 초과)")
 
         # 정면/측면/후면 3개 동시 호출 — 순차 대비 ~3배 빠름
         results = {}
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {executor.submit(_call_one, v, p): v for v, p in prompts.items()}
             for fut in as_completed(futures):
-                view, img = fut.result()  # 예외 있으면 여기서 re-raise
+                view, img = fut.result()
                 results[view] = img
 
         return results
