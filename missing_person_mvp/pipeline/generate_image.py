@@ -75,7 +75,7 @@ def _gemini_generate(base_path: str, outfit_desc: str) -> Image.Image:
 
         for attempt in range(3):
             response = client.models.generate_content(
-                model="gemini-2.0-flash-preview-image-generation",
+                model="gemini-2.5-flash-image",
                 contents=[prompt, pil_img],
                 config=gen_cfg,
             )
@@ -131,7 +131,7 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
         def _call_one(view: str, prompt: str) -> tuple[str, Image.Image]:
             for attempt in range(3):
                 resp = client.models.generate_content(
-                    model="gemini-2.0-flash-preview-image-generation",
+                    model="gemini-2.5-flash-image",
                     contents=[prompt, pil_img],
                     config=gen_cfg,
                 )
