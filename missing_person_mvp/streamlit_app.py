@@ -435,16 +435,18 @@ if page == "👤 인물 등록":
         else:
             with st.spinner("Part embedding bank 생성 중… (첫 등록은 30초 내외)"):
                 saved_paths: list[str] = []
-                tmp_dir = Path(tempfile.mkdtemp())
+                # 영구 경로: /data/db/{person_id}/photos/ — 앱 재시작·pod 재기동 후에도 유지
+                photo_dir = _cfg.DB_DIR / person_id.strip() / "photos"
+                photo_dir.mkdir(parents=True, exist_ok=True)
                 view_uploads = {"front": front_upload, "side": side_upload, "back": back_upload}
                 view_paths: dict[str, str] = {}
                 for view, f in view_uploads.items():
-                    p = tmp_dir / f"{view}_{f.name}"
+                    p = photo_dir / f"{view}_{f.name}"
                     p.write_bytes(f.read())
                     view_paths[view] = str(p)
                     saved_paths.append(str(p))
                 for f in uploaded or []:
-                    p = tmp_dir / f.name
+                    p = photo_dir / f.name
                     p.write_bytes(f.read())
                     if str(p) not in saved_paths:
                         saved_paths.append(str(p))
