@@ -109,7 +109,7 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
         import google.generativeai as genai           # type: ignore
 
         genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash-exp")
+        model = genai.GenerativeModel("gemini-2.5-flash-image")
 
         # PIL Image 직접 전달 — SDK 버전별 raw bytes 파싱 오류 우회
         pil_img = Image.open(base_path).convert("RGB")
@@ -119,40 +119,33 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
             "side": f"Edit this full-body person photo so they appear to wear: {outfit_desc}. Show side profile view (person standing sideways), same person, identity preserved.",
             "back": f"Edit this full-body person photo so they appear to wear: {outfit_desc}. Show back view (person facing away), same person, identity preserved.",
         }
-        results = {}
-        for view, prompt in prompts.items():
-            response = model.generate_content(
-                [prompt, pil_img],
-                generation_config={"response_modalities": ["IMAGE", "TEXT"]},
-            )
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            # google.generativeai 응답에서 이미지 추출
-            found = False
-            candidates = getattr(response, "candidates", None)
+        def _call_one(view: str, prompt: str) -> tuple[str, Image.Image]:
+            resp = model.generate_content([prompt, pil_img])
+            candidates = getattr(resp, "candidates", None)
             if candidates:
                 cand = candidates[0]
-                content = getattr(cand, "content", None)
-                parts = getattr(content, "parts", None) if content else None
-                for part in (parts or []):
+                parts = getattr(getattr(cand, "content", None), "parts", None) or []
+                for part in parts:
                     inline = getattr(part, "inline_data", None)
                     if inline and getattr(inline, "data", None):
                         raw = inline.data
-                        # SDK 버전에 따라 bytes 또는 list[int] 반환 가능
                         if not isinstance(raw, (bytes, bytearray)):
                             raw = bytes(raw)
-                        results[view] = Image.open(io.BytesIO(raw)).convert("RGB")
-                        found = True
-                        break
-                if not found:
-                    fr = getattr(cand, "finish_reason", "UNKNOWN")
-                    raise ImageGenerationError(
-                        f"Gemini {view} 이미지 없음 (finish_reason={fr})"
-                    )
-            else:
-                fb = getattr(response, "prompt_feedback", None)
-                raise ImageGenerationError(
-                    f"Gemini {view} 응답에 candidates 없음 (prompt_feedback={fb})"
-                )
+                        return view, Image.open(io.BytesIO(raw)).convert("RGB")
+                fr = getattr(cand, "finish_reason", "UNKNOWN")
+                raise ImageGenerationError(f"Gemini {view} 이미지 없음 (finish_reason={fr})")
+            fb = getattr(resp, "prompt_feedback", None)
+            raise ImageGenerationError(f"Gemini {view} 응답에 candidates 없음 (prompt_feedback={fb})")
+
+        # 정면/측면/후면 3개 동시 호출 — 순차 대비 ~3배 빠름
+        results = {}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(_call_one, v, p): v for v, p in prompts.items()}
+            for fut in as_completed(futures):
+                view, img = fut.result()  # 예외 있으면 여기서 re-raise
+                results[view] = img
 
         return results
     except ImageGenerationError:
