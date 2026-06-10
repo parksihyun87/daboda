@@ -109,11 +109,10 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
         import google.generativeai as genai           # type: ignore
 
         genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash-image")
+        model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
-        buf = io.BytesIO()
-        Image.open(base_path).convert("RGB").save(buf, format="JPEG")
-        img_bytes = buf.getvalue()
+        # PIL Image 직접 전달 — SDK 버전별 raw bytes 파싱 오류 우회
+        pil_img = Image.open(base_path).convert("RGB")
 
         prompts = {
             "front": f"Edit this full-body person photo so they appear to wear: {outfit_desc}. Keep front-facing view, neutral pose, identity preserved.",
@@ -122,10 +121,10 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
         }
         results = {}
         for view, prompt in prompts.items():
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "image/jpeg", "data": img_bytes},
-            ])
+            response = model.generate_content(
+                [prompt, pil_img],
+                generation_config={"response_modalities": ["IMAGE", "TEXT"]},
+            )
 
             # google.generativeai 응답에서 이미지 추출
             found = False
@@ -137,7 +136,11 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
                 for part in (parts or []):
                     inline = getattr(part, "inline_data", None)
                     if inline and getattr(inline, "data", None):
-                        results[view] = Image.open(io.BytesIO(inline.data)).convert("RGB")
+                        raw = inline.data
+                        # SDK 버전에 따라 bytes 또는 list[int] 반환 가능
+                        if not isinstance(raw, (bytes, bytearray)):
+                            raw = bytes(raw)
+                        results[view] = Image.open(io.BytesIO(raw)).convert("RGB")
                         found = True
                         break
                 if not found:
