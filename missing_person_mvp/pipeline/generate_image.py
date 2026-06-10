@@ -61,41 +61,32 @@ def _gemini_generate(base_path: str, outfit_desc: str) -> Image.Image:
         raise ImageGenerationError("GEMINI_API_KEY is not configured.")
     try:
         import io
-        import google.generativeai as genai           # type: ignore
+        from google import genai                      # type: ignore
+        from google.genai import types as gtypes      # type: ignore
 
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            "gemini-2.5-flash-image",
-            generation_config={"response_modalities": ["IMAGE"]},
-        )
-
+        client = genai.Client(api_key=config.GEMINI_API_KEY)
         pil_img = Image.open(base_path).convert("RGB")
         prompt = (
             "Generate a full-body photo of this person wearing: "
             f"{outfit_desc}. Preserve identity, body shape, pose, and a neutral background. "
             "Output an image only."
         )
+        gen_cfg = gtypes.GenerateContentConfig(response_modalities=["IMAGE"])
 
         for attempt in range(3):
-            response = model.generate_content([prompt, pil_img])
-            candidates = getattr(response, "candidates", None)
-            if candidates:
-                cand = candidates[0]
-                parts = getattr(getattr(cand, "content", None), "parts", None) or []
-                for part in parts:
-                    inline = getattr(part, "inline_data", None)
-                    if inline and getattr(inline, "data", None):
-                        raw = inline.data
-                        if not isinstance(raw, (bytes, bytearray)):
-                            raw = bytes(raw)
-                        return Image.open(io.BytesIO(raw)).convert("RGB")
-                if attempt < 2:
-                    time.sleep(2)
-                    continue
-                fr = getattr(cand, "finish_reason", "UNKNOWN")
-                raise ImageGenerationError(f"Gemini 이미지 없음 (finish_reason={fr})")
-            fb = getattr(response, "prompt_feedback", None)
-            raise ImageGenerationError(f"Gemini 응답에 candidates 없음 (prompt_feedback={fb})")
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-preview-image-generation",
+                contents=[prompt, pil_img],
+                config=gen_cfg,
+            )
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "inline_data", None) and part.inline_data.data:
+                    return Image.open(io.BytesIO(part.inline_data.data)).convert("RGB")
+            if attempt < 2:
+                time.sleep(2)
+                continue
+            fr = getattr(response.candidates[0], "finish_reason", "UNKNOWN")
+            raise ImageGenerationError(f"Gemini 이미지 없음 (finish_reason={fr})")
 
     except ImageGenerationError:
         raise
@@ -109,16 +100,12 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
         raise ImageGenerationError("GEMINI_API_KEY is not configured.")
     try:
         import io
-        import google.generativeai as genai           # type: ignore
+        from google import genai                      # type: ignore
+        from google.genai import types as gtypes      # type: ignore
 
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        # response_modalities=IMAGE 명시 → 텍스트 응답 방지
-        model = genai.GenerativeModel(
-            "gemini-2.5-flash-image",
-            generation_config={"response_modalities": ["IMAGE"]},
-        )
-
+        client = genai.Client(api_key=config.GEMINI_API_KEY)
         pil_img = Image.open(base_path).convert("RGB")
+        gen_cfg = gtypes.GenerateContentConfig(response_modalities=["IMAGE"])
 
         prompts = {
             "front": (
@@ -129,15 +116,13 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
             "side": (
                 f"Using this person as reference, generate a NEW full-body photo of the SAME person "
                 f"photographed from a 90-degree side angle (lateral profile). "
-                f"The person is turned sideways so the camera sees only their left side profile — "
-                f"face pointing left, body perpendicular to the camera. "
+                f"The person is turned sideways — face pointing left, body perpendicular to the camera. "
                 f"They are wearing: {outfit_desc}. Neutral indoor background. Output an image only."
             ),
             "back": (
                 f"Using this person as reference, generate a NEW full-body photo of the SAME person "
                 f"photographed from directly behind (180-degree back view). "
-                f"The person's back faces the camera completely — no face visible, "
-                f"only the rear of their head, back, and the back of their legs. "
+                f"The person's back faces the camera — no face visible, only rear of head, back, and legs. "
                 f"They are wearing: {outfit_desc}. Neutral indoor background. Output an image only."
             ),
         }
@@ -145,29 +130,20 @@ def _gemini_generate_three_views(base_path: str, outfit_desc: str) -> dict[str, 
 
         def _call_one(view: str, prompt: str) -> tuple[str, Image.Image]:
             for attempt in range(3):
-                resp = model.generate_content([prompt, pil_img])
-                candidates = getattr(resp, "candidates", None)
-                if candidates:
-                    cand = candidates[0]
-                    parts = getattr(getattr(cand, "content", None), "parts", None) or []
-                    for part in parts:
-                        inline = getattr(part, "inline_data", None)
-                        if inline and getattr(inline, "data", None):
-                            raw = inline.data
-                            if not isinstance(raw, (bytes, bytearray)):
-                                raw = bytes(raw)
-                            return view, Image.open(io.BytesIO(raw)).convert("RGB")
-                    # 이미지 없이 텍스트만 반환 — 재시도
-                    if attempt < 2:
-                        time.sleep(2)
-                        continue
-                    fr = getattr(cand, "finish_reason", "UNKNOWN")
-                    raise ImageGenerationError(
-                        f"Gemini {view} 이미지 없음 after {attempt+1} attempts (finish_reason={fr})"
-                    )
-                fb = getattr(resp, "prompt_feedback", None)
+                resp = client.models.generate_content(
+                    model="gemini-2.0-flash-preview-image-generation",
+                    contents=[prompt, pil_img],
+                    config=gen_cfg,
+                )
+                for part in resp.candidates[0].content.parts:
+                    if getattr(part, "inline_data", None) and part.inline_data.data:
+                        return view, Image.open(io.BytesIO(part.inline_data.data)).convert("RGB")
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                fr = getattr(resp.candidates[0], "finish_reason", "UNKNOWN")
                 raise ImageGenerationError(
-                    f"Gemini {view} 응답에 candidates 없음 (prompt_feedback={fb})"
+                    f"Gemini {view} 이미지 없음 after {attempt + 1} attempts (finish_reason={fr})"
                 )
             raise ImageGenerationError(f"Gemini {view} 이미지 없음 (최대 재시도 초과)")
 
