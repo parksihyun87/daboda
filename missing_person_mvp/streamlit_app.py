@@ -465,7 +465,7 @@ if page == "👤 인물 등록":
                         with st.spinner("YOLO-Pose로 걸음걸이 골격 추출 중… (영상 길이에 따라 수 분)"):
                             _gpaths = []
                             for _gv in _gait_ups:
-                                _gp = tmp_dir / _gv.name
+                                _gp = photo_dir / _gv.name
                                 _gp.write_bytes(_gv.read())
                                 _gpaths.append(str(_gp))
                             _gait_ok = register_gait_videos(result.person_id, _gpaths)
